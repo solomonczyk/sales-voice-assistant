@@ -1,0 +1,186 @@
+syntax = "proto3";
+
+package sales_voice.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// Сервис языковых моделей
+service LLMService {
+  // Генерация ответа
+  rpc GenerateResponse(GenerateResponseRequest) returns (GenerateResponseResponse);
+  
+  // Потоковая генерация ответа
+  rpc StreamGenerateResponse(StreamGenerateResponseRequest) returns (stream StreamGenerateResponseResponse);
+  
+  // Классификация намерения
+  rpc ClassifyIntent(ClassifyIntentRequest) returns (ClassifyIntentResponse);
+  
+  // Извлечение сущностей
+  rpc ExtractEntities(ExtractEntitiesRequest) returns (ExtractEntitiesResponse);
+  
+  // Анализ тональности
+  rpc AnalyzeSentiment(AnalyzeSentimentRequest) returns (AnalyzeSentimentResponse);
+  
+  // Получить статус обработки
+  rpc GetProcessingStatus(GetProcessingStatusRequest) returns (GetProcessingStatusResponse);
+}
+
+// Статус обработки
+enum ProcessingStatus {
+  PROCESSING_STATUS_UNSPECIFIED = 0;
+  PROCESSING_STATUS_PENDING = 1;
+  PROCESSING_STATUS_PROCESSING = 2;
+  PROCESSING_STATUS_COMPLETED = 3;
+  PROCESSING_STATUS_FAILED = 4;
+  PROCESSING_STATUS_CANCELLED = 5;
+}
+
+// Намерение
+message Intent {
+  string name = 1;
+  double confidence = 2;
+  google.protobuf.Struct parameters = 3;
+}
+
+// Сущность
+message Entity {
+  string type = 1;
+  string value = 2;
+  double confidence = 3;
+  int32 start_index = 4;
+  int32 end_index = 5;
+}
+
+// Тональность
+message Sentiment {
+  string label = 1;
+  double score = 2;
+  double positive = 3;
+  double neutral = 4;
+  double negative = 5;
+}
+
+// Сообщение
+message Message {
+  string role = 1;
+  string content = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  google.protobuf.Struct metadata = 4;
+}
+
+// Контекст диалога
+message DialogContext {
+  string session_id = 1;
+  repeated Message messages = 2;
+  google.protobuf.Struct state = 3;
+  repeated Intent intents = 4;
+  repeated Entity entities = 5;
+}
+
+// Запрос на генерацию ответа
+message GenerateResponseRequest {
+  DialogContext context = 1;
+  string prompt = 2;
+  string model = 3;
+  double temperature = 4;
+  int32 max_tokens = 5;
+  repeated string stop_sequences = 6;
+  google.protobuf.Struct parameters = 7;
+  string session_id = 8;
+}
+
+// Ответ на генерацию
+message GenerateResponseResponse {
+  string processing_id = 1;
+  ProcessingStatus status = 2;
+  string response = 3;
+  repeated string tokens = 4;
+  int32 tokens_used = 5;
+  double processing_time = 6;
+  string error_message = 7;
+}
+
+// Запрос на потоковую генерацию
+message StreamGenerateResponseRequest {
+  oneof streaming_request {
+    GenerateResponseRequest config = 1;
+    string additional_text = 2;
+  }
+}
+
+// Ответ на потоковую генерацию
+message StreamGenerateResponseResponse {
+  string processing_id = 1;
+  ProcessingStatus status = 2;
+  string token = 3;
+  bool is_final = 4;
+  int32 tokens_used = 5;
+  string error_message = 6;
+}
+
+// Запрос на классификацию намерения
+message ClassifyIntentRequest {
+  string text = 1;
+  repeated string possible_intents = 2;
+  string model = 3;
+  string session_id = 4;
+}
+
+// Ответ на классификацию намерения
+message ClassifyIntentResponse {
+  string processing_id = 1;
+  ProcessingStatus status = 2;
+  Intent intent = 3;
+  repeated Intent alternative_intents = 4;
+  double processing_time = 5;
+  string error_message = 6;
+}
+
+// Запрос на извлечение сущностей
+message ExtractEntitiesRequest {
+  string text = 1;
+  repeated string entity_types = 2;
+  string model = 3;
+  string session_id = 4;
+}
+
+// Ответ на извлечение сущностей
+message ExtractEntitiesResponse {
+  string processing_id = 1;
+  ProcessingStatus status = 2;
+  repeated Entity entities = 3;
+  double processing_time = 4;
+  string error_message = 5;
+}
+
+// Запрос на анализ тональности
+message AnalyzeSentimentRequest {
+  string text = 1;
+  string model = 2;
+  string session_id = 3;
+}
+
+// Ответ на анализ тональности
+message AnalyzeSentimentResponse {
+  string processing_id = 1;
+  ProcessingStatus status = 2;
+  Sentiment sentiment = 3;
+  double processing_time = 4;
+  string error_message = 5;
+}
+
+// Запрос на получение статуса обработки
+message GetProcessingStatusRequest {
+  string processing_id = 1;
+}
+
+// Ответ на получение статуса обработки
+message GetProcessingStatusResponse {
+  string processing_id = 1;
+  ProcessingStatus status = 2;
+  google.protobuf.Struct result = 3;
+  string error_message = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}

@@ -1,0 +1,331 @@
+version: '3.8'
+
+services:
+  # База данных
+  postgres:
+    image: postgres:15-alpine
+    container_name: sales-voice-postgres
+    environment:
+      POSTGRES_DB: sales_voice
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - sales-voice-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Векторная база данных
+  qdrant:
+    image: qdrant/qdrant:v1.7.0
+    container_name: sales-voice-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - sales-voice-network
+    environment:
+      QDRANT__SERVICE__HTTP_PORT: 6333
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis для кэширования и очередей
+  redis:
+    image: redis:7-alpine
+    container_name: sales-voice-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - sales-voice-network
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.88.0
+    container_name: sales-voice-otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "8888:8888"   # Prometheus metrics
+      - "8889:8889"   # Prometheus exporter metrics
+    networks:
+      - sales-voice-network
+    depends_on:
+      - jaeger
+      - prometheus
+
+  # Jaeger для трассировки
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    container_name: sales-voice-jaeger
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # Jaeger HTTP collector
+    environment:
+      COLLECTOR_OTLP_ENABLED: true
+    networks:
+      - sales-voice-network
+
+  # Prometheus для метрик
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: sales-voice-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - sales-voice-network
+
+  # Grafana для визуализации
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: sales-voice-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: false
+    networks:
+      - sales-voice-network
+    depends_on:
+      - prometheus
+
+  # Сервисы приложения
+  telephony-gateway:
+    build:
+      context: ../../apps/telephony-gateway
+      dockerfile: Dockerfile
+    container_name: sales-voice-telephony-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - POSTGRES_URL=postgresql://postgres:postgres@postgres:5432/sales_voice
+      - REDIS_URL=redis://redis:6379
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+    networks:
+      - sales-voice-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    volumes:
+      - ../../apps/telephony-gateway:/app
+      - /app/node_modules
+
+  asr-service:
+    build:
+      context: ../../apps/asr-service
+      dockerfile: Dockerfile
+    container_name: sales-voice-asr-service
+    ports:
+      - "8001:8001"
+    environment:
+      - PYTHONPATH=/app
+      - POSTGRES_URL=postgresql://postgres:postgres@postgres:5432/sales_voice
+      - REDIS_URL=redis://redis:6379
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - YANDEX_SPEECHKIT_API_KEY=${YANDEX_SPEECHKIT_API_KEY}
+    networks:
+      - sales-voice-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    volumes:
+      - ../../apps/asr-service:/app
+
+  tts-service:
+    build:
+      context: ../../apps/tts-service
+      dockerfile: Dockerfile
+    container_name: sales-voice-tts-service
+    ports:
+      - "8002:8002"
+    environment:
+      - PYTHONPATH=/app
+      - POSTGRES_URL=postgresql://postgres:postgres@postgres:5432/sales_voice
+      - REDIS_URL=redis://redis:6379
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - YANDEX_SPEECHKIT_API_KEY=${YANDEX_SPEECHKIT_API_KEY}
+    networks:
+      - sales-voice-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    volumes:
+      - ../../apps/tts-service:/app
+
+  dialog-orchestrator:
+    build:
+      context: ../../apps/dialog-orchestrator
+      dockerfile: Dockerfile
+    container_name: sales-voice-dialog-orchestrator
+    ports:
+      - "8003:8003"
+    environment:
+      - PYTHONPATH=/app
+      - POSTGRES_URL=postgresql://postgres:postgres@postgres:5432/sales_voice
+      - REDIS_URL=redis://redis:6379
+      - QDRANT_URL=http://qdrant:6333
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - BITRIX24_WEBHOOK_URL=${BITRIX24_WEBHOOK_URL}
+    networks:
+      - sales-voice-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    volumes:
+      - ../../apps/dialog-orchestrator:/app
+
+  rag-service:
+    build:
+      context: ../../apps/rag-service
+      dockerfile: Dockerfile
+    container_name: sales-voice-rag-service
+    ports:
+      - "8004:8004"
+    environment:
+      - PYTHONPATH=/app
+      - QDRANT_URL=http://qdrant:6333
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+    networks:
+      - sales-voice-network
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    volumes:
+      - ../../apps/rag-service:/app
+
+  crm-connector:
+    build:
+      context: ../../apps/crm-connector
+      dockerfile: Dockerfile
+    container_name: sales-voice-crm-connector
+    ports:
+      - "8005:8005"
+    environment:
+      - PYTHONPATH=/app
+      - POSTGRES_URL=postgresql://postgres:postgres@postgres:5432/sales_voice
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - BITRIX24_WEBHOOK_URL=${BITRIX24_WEBHOOK_URL}
+      - BITRIX24_ACCESS_TOKEN=${BITRIX24_ACCESS_TOKEN}
+    networks:
+      - sales-voice-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    volumes:
+      - ../../apps/crm-connector:/app
+
+  analytics:
+    build:
+      context: ../../apps/analytics
+      dockerfile: Dockerfile
+    container_name: sales-voice-analytics
+    ports:
+      - "8006:8006"
+    environment:
+      - PYTHONPATH=/app
+      - POSTGRES_URL=postgresql://postgres:postgres@postgres:5432/sales_voice
+      - REDIS_URL=redis://redis:6379
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+    networks:
+      - sales-voice-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    volumes:
+      - ../../apps/analytics:/app
+
+  admin-api:
+    build:
+      context: ../../apps/admin-api
+      dockerfile: Dockerfile
+    container_name: sales-voice-admin-api
+    ports:
+      - "8007:8007"
+    environment:
+      - PYTHONPATH=/app
+      - POSTGRES_URL=postgresql://postgres:postgres@postgres:5432/sales_voice
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+    networks:
+      - sales-voice-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    volumes:
+      - ../../apps/admin-api:/app
+
+volumes:
+  postgres_data:
+  qdrant_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  sales-voice-network:
+    driver: bridge

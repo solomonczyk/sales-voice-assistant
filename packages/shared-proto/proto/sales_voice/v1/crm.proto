@@ -1,0 +1,377 @@
+syntax = "proto3";
+
+package sales_voice.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// Сервис интеграции с CRM
+service CRMService {
+  // Создать лида
+  rpc CreateLead(CreateLeadRequest) returns (CreateLeadResponse);
+  
+  // Обновить лида
+  rpc UpdateLead(UpdateLeadRequest) returns (UpdateLeadResponse);
+  
+  // Получить лида
+  rpc GetLead(GetLeadRequest) returns (GetLeadResponse);
+  
+  // Создать сделку
+  rpc CreateDeal(CreateDealRequest) returns (CreateDealResponse);
+  
+  // Обновить сделку
+  rpc UpdateDeal(UpdateDealRequest) returns (UpdateDealResponse);
+  
+  // Получить сделку
+  rpc GetDeal(GetDealRequest) returns (GetDealResponse);
+  
+  // Создать клиента
+  rpc CreateClient(CreateClientRequest) returns (CreateClientResponse);
+  
+  // Обновить клиента
+  rpc UpdateClient(UpdateClientRequest) returns (UpdateClientResponse);
+  
+  // Получить клиента
+  rpc GetClient(GetClientRequest) returns (GetClientResponse);
+  
+  // Найти клиента по телефону
+  rpc FindClientByPhone(FindClientByPhoneRequest) returns (FindClientByPhoneResponse);
+  
+  // Создать задачу
+  rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse);
+  
+  // Обновить задачу
+  rpc UpdateTask(UpdateTaskRequest) returns (UpdateTaskResponse);
+  
+  // Получить задачи
+  rpc GetTasks(GetTasksRequest) returns (GetTasksResponse);
+  
+  // Синхронизировать данные
+  rpc SyncData(SyncDataRequest) returns (SyncDataResponse);
+}
+
+// Статус лида
+enum LeadStatus {
+  LEAD_STATUS_UNSPECIFIED = 0;
+  LEAD_STATUS_NEW = 1;
+  LEAD_STATUS_CONTACTED = 2;
+  LEAD_STATUS_QUALIFIED = 3;
+  LEAD_STATUS_PROPOSAL = 4;
+  LEAD_STATUS_NEGOTIATION = 5;
+  LEAD_STATUS_WON = 6;
+  LEAD_STATUS_LOST = 7;
+}
+
+// Статус сделки
+enum DealStatus {
+  DEAL_STATUS_UNSPECIFIED = 0;
+  DEAL_STATUS_NEW = 1;
+  DEAL_STATUS_IN_PROGRESS = 2;
+  DEAL_STATUS_NEGOTIATION = 3;
+  DEAL_STATUS_APPROVED = 4;
+  DEAL_STATUS_CLOSED_WON = 5;
+  DEAL_STATUS_CLOSED_LOST = 6;
+}
+
+// Статус задачи
+enum TaskStatus {
+  TASK_STATUS_UNSPECIFIED = 0;
+  TASK_STATUS_NEW = 1;
+  TASK_STATUS_IN_PROGRESS = 2;
+  TASK_STATUS_COMPLETED = 3;
+  TASK_STATUS_CANCELLED = 4;
+}
+
+// Приоритет задачи
+enum TaskPriority {
+  TASK_PRIORITY_UNSPECIFIED = 0;
+  TASK_PRIORITY_LOW = 1;
+  TASK_PRIORITY_NORMAL = 2;
+  TASK_PRIORITY_HIGH = 3;
+  TASK_PRIORITY_URGENT = 4;
+}
+
+// Лид
+message Lead {
+  string id = 1;
+  string external_id = 2;
+  string client_id = 3;
+  string call_id = 4;
+  string title = 5;
+  string description = 6;
+  LeadStatus status = 7;
+  string source = 8;
+  string product_interest = 9;
+  string budget_range = 10;
+  string timeline = 11;
+  string notes = 12;
+  google.protobuf.Struct custom_fields = 13;
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp updated_at = 15;
+}
+
+// Сделка
+message Deal {
+  string id = 1;
+  string external_id = 2;
+  string lead_id = 3;
+  string client_id = 4;
+  string title = 5;
+  string description = 6;
+  DealStatus status = 7;
+  double value = 8;
+  string currency = 9;
+  int32 probability = 10;
+  google.protobuf.Timestamp expected_close_date = 11;
+  google.protobuf.Struct custom_fields = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
+}
+
+// Клиент
+message Client {
+  string id = 1;
+  string external_id = 2;
+  string name = 3;
+  string phone = 4;
+  string email = 5;
+  string company = 6;
+  string position = 7;
+  string address = 8;
+  google.protobuf.Struct custom_fields = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
+}
+
+// Задача
+message Task {
+  string id = 1;
+  string external_id = 2;
+  string title = 3;
+  string description = 4;
+  TaskStatus status = 5;
+  TaskPriority priority = 6;
+  string assigned_to = 7;
+  string client_id = 8;
+  string lead_id = 9;
+  string deal_id = 10;
+  google.protobuf.Timestamp due_date = 11;
+  google.protobuf.Struct custom_fields = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
+}
+
+// Запрос на создание лида
+message CreateLeadRequest {
+  string client_id = 1;
+  string call_id = 2;
+  string title = 3;
+  string description = 4;
+  string source = 5;
+  string product_interest = 6;
+  string budget_range = 7;
+  string timeline = 8;
+  string notes = 9;
+  google.protobuf.Struct custom_fields = 10;
+}
+
+// Ответ на создание лида
+message CreateLeadResponse {
+  Lead lead = 1;
+}
+
+// Запрос на обновление лида
+message UpdateLeadRequest {
+  string lead_id = 1;
+  string title = 2;
+  string description = 3;
+  LeadStatus status = 4;
+  string product_interest = 5;
+  string budget_range = 6;
+  string timeline = 7;
+  string notes = 8;
+  google.protobuf.Struct custom_fields = 9;
+}
+
+// Ответ на обновление лида
+message UpdateLeadResponse {
+  Lead lead = 1;
+}
+
+// Запрос на получение лида
+message GetLeadRequest {
+  string lead_id = 1;
+}
+
+// Ответ на получение лида
+message GetLeadResponse {
+  Lead lead = 1;
+}
+
+// Запрос на создание сделки
+message CreateDealRequest {
+  string lead_id = 1;
+  string client_id = 2;
+  string title = 3;
+  string description = 4;
+  double value = 5;
+  string currency = 6;
+  int32 probability = 7;
+  google.protobuf.Timestamp expected_close_date = 8;
+  google.protobuf.Struct custom_fields = 9;
+}
+
+// Ответ на создание сделки
+message CreateDealResponse {
+  Deal deal = 1;
+}
+
+// Запрос на обновление сделки
+message UpdateDealRequest {
+  string deal_id = 1;
+  string title = 2;
+  string description = 3;
+  DealStatus status = 4;
+  double value = 5;
+  string currency = 6;
+  int32 probability = 7;
+  google.protobuf.Timestamp expected_close_date = 8;
+  google.protobuf.Struct custom_fields = 9;
+}
+
+// Ответ на обновление сделки
+message UpdateDealResponse {
+  Deal deal = 1;
+}
+
+// Запрос на получение сделки
+message GetDealRequest {
+  string deal_id = 1;
+}
+
+// Ответ на получение сделки
+message GetDealResponse {
+  Deal deal = 1;
+}
+
+// Запрос на создание клиента
+message CreateClientRequest {
+  string name = 1;
+  string phone = 2;
+  string email = 3;
+  string company = 4;
+  string position = 5;
+  string address = 6;
+  google.protobuf.Struct custom_fields = 7;
+}
+
+// Ответ на создание клиента
+message CreateClientResponse {
+  Client client = 1;
+}
+
+// Запрос на обновление клиента
+message UpdateClientRequest {
+  string client_id = 1;
+  string name = 2;
+  string phone = 3;
+  string email = 4;
+  string company = 5;
+  string position = 6;
+  string address = 7;
+  google.protobuf.Struct custom_fields = 8;
+}
+
+// Ответ на обновление клиента
+message UpdateClientResponse {
+  Client client = 1;
+}
+
+// Запрос на получение клиента
+message GetClientRequest {
+  string client_id = 1;
+}
+
+// Ответ на получение клиента
+message GetClientResponse {
+  Client client = 1;
+}
+
+// Запрос на поиск клиента по телефону
+message FindClientByPhoneRequest {
+  string phone = 1;
+}
+
+// Ответ на поиск клиента по телефону
+message FindClientByPhoneResponse {
+  Client client = 1;
+  bool found = 2;
+}
+
+// Запрос на создание задачи
+message CreateTaskRequest {
+  string title = 1;
+  string description = 2;
+  TaskPriority priority = 3;
+  string assigned_to = 4;
+  string client_id = 5;
+  string lead_id = 6;
+  string deal_id = 7;
+  google.protobuf.Timestamp due_date = 8;
+  google.protobuf.Struct custom_fields = 9;
+}
+
+// Ответ на создание задачи
+message CreateTaskResponse {
+  Task task = 1;
+}
+
+// Запрос на обновление задачи
+message UpdateTaskRequest {
+  string task_id = 1;
+  string title = 2;
+  string description = 3;
+  TaskStatus status = 4;
+  TaskPriority priority = 5;
+  string assigned_to = 6;
+  google.protobuf.Timestamp due_date = 7;
+  google.protobuf.Struct custom_fields = 8;
+}
+
+// Ответ на обновление задачи
+message UpdateTaskResponse {
+  Task task = 1;
+}
+
+// Запрос на получение задач
+message GetTasksRequest {
+  string client_id = 1;
+  string lead_id = 2;
+  string deal_id = 3;
+  TaskStatus status = 4;
+  string assigned_to = 5;
+  int32 page = 6;
+  int32 page_size = 7;
+}
+
+// Ответ на получение задач
+message GetTasksResponse {
+  repeated Task tasks = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// Запрос на синхронизацию данных
+message SyncDataRequest {
+  string entity_type = 1;
+  google.protobuf.Timestamp from_date = 2;
+  google.protobuf.Timestamp to_date = 3;
+}
+
+// Ответ на синхронизацию данных
+message SyncDataResponse {
+  string sync_id = 1;
+  int32 records_synced = 2;
+  google.protobuf.Timestamp sync_time = 3;
+}

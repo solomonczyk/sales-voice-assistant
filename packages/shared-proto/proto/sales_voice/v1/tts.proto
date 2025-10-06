@@ -1,0 +1,148 @@
+syntax = "proto3";
+
+package sales_voice.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Сервис синтеза речи
+service TTSService {
+  // Синтезировать речь из текста
+  rpc SynthesizeSpeech(SynthesizeSpeechRequest) returns (SynthesizeSpeechResponse);
+  
+  // Потоковый синтез речи
+  rpc StreamSynthesizeSpeech(stream StreamSynthesizeSpeechRequest) returns (stream StreamSynthesizeSpeechResponse);
+  
+  // Получить статус синтеза
+  rpc GetSynthesisStatus(GetSynthesisStatusRequest) returns (GetSynthesisStatusResponse);
+  
+  // Отменить синтез
+  rpc CancelSynthesis(CancelSynthesisRequest) returns (CancelSynthesisResponse);
+  
+  // Получить список доступных голосов
+  rpc ListVoices(ListVoicesRequest) returns (ListVoicesResponse);
+}
+
+// Формат аудио
+enum AudioFormat {
+  AUDIO_FORMAT_UNSPECIFIED = 0;
+  AUDIO_FORMAT_WAV = 1;
+  AUDIO_FORMAT_MP3 = 2;
+  AUDIO_FORMAT_OGG = 3;
+  AUDIO_FORMAT_FLAC = 4;
+  AUDIO_FORMAT_RAW = 5;
+}
+
+// Статус синтеза
+enum SynthesisStatus {
+  SYNTHESIS_STATUS_UNSPECIFIED = 0;
+  SYNTHESIS_STATUS_PENDING = 1;
+  SYNTHESIS_STATUS_PROCESSING = 2;
+  SYNTHESIS_STATUS_COMPLETED = 3;
+  SYNTHESIS_STATUS_FAILED = 4;
+  SYNTHESIS_STATUS_CANCELLED = 5;
+}
+
+// Информация о голосе
+message Voice {
+  string id = 1;
+  string name = 2;
+  string language = 3;
+  string gender = 4;
+  int32 sample_rate = 5;
+  repeated AudioFormat supported_formats = 6;
+}
+
+// Результат синтеза
+message SynthesisResult {
+  bytes audio_data = 1;
+  AudioFormat format = 2;
+  int32 sample_rate = 3;
+  int32 channels = 4;
+  double duration = 5;
+  string voice_id = 6;
+}
+
+// Запрос на синтез речи
+message SynthesizeSpeechRequest {
+  string text = 1;
+  string voice_id = 2;
+  AudioFormat format = 3;
+  int32 sample_rate = 4;
+  double speed = 5;
+  double pitch = 6;
+  double volume = 7;
+  string session_id = 8;
+}
+
+// Ответ на синтез речи
+message SynthesizeSpeechResponse {
+  string synthesis_id = 1;
+  SynthesisStatus status = 2;
+  SynthesisResult result = 3;
+  string error_message = 4;
+}
+
+// Запрос на потоковый синтез
+message StreamSynthesizeSpeechRequest {
+  oneof streaming_request {
+    SynthesisConfig config = 1;
+    string text_chunk = 2;
+  }
+}
+
+// Конфигурация синтеза
+message SynthesisConfig {
+  string voice_id = 1;
+  AudioFormat format = 2;
+  int32 sample_rate = 3;
+  double speed = 4;
+  double pitch = 5;
+  double volume = 6;
+  string session_id = 7;
+}
+
+// Ответ на потоковый синтез
+message StreamSynthesizeSpeechResponse {
+  string synthesis_id = 1;
+  SynthesisStatus status = 2;
+  bytes audio_chunk = 3;
+  bool is_final = 4;
+  string error_message = 5;
+}
+
+// Запрос на получение статуса синтеза
+message GetSynthesisStatusRequest {
+  string synthesis_id = 1;
+}
+
+// Ответ на получение статуса синтеза
+message GetSynthesisStatusResponse {
+  string synthesis_id = 1;
+  SynthesisStatus status = 2;
+  SynthesisResult result = 3;
+  string error_message = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+// Запрос на отмену синтеза
+message CancelSynthesisRequest {
+  string synthesis_id = 1;
+}
+
+// Ответ на отмену синтеза
+message CancelSynthesisResponse {
+  string synthesis_id = 1;
+  bool cancelled = 2;
+}
+
+// Запрос на получение списка голосов
+message ListVoicesRequest {
+  string language = 1;
+  string gender = 2;
+}
+
+// Ответ на получение списка голосов
+message ListVoicesResponse {
+  repeated Voice voices = 1;
+}

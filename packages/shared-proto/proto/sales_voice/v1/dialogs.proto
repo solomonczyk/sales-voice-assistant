@@ -1,0 +1,142 @@
+syntax = "proto3";
+
+package sales_voice.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// Сервис для управления диалогами
+service DialogService {
+  // Создать новый диалог
+  rpc CreateDialog(CreateDialogRequest) returns (CreateDialogResponse);
+  
+  // Получить диалог
+  rpc GetDialog(GetDialogRequest) returns (GetDialogResponse);
+  
+  // Добавить ход в диалог
+  rpc AddDialogTurn(AddDialogTurnRequest) returns (AddDialogTurnResponse);
+  
+  // Получить историю диалога
+  rpc GetDialogHistory(GetDialogHistoryRequest) returns (GetDialogHistoryResponse);
+  
+  // Обновить намерение
+  rpc UpdateIntent(UpdateIntentRequest) returns (UpdateIntentResponse);
+  
+  // Получить контекст диалога
+  rpc GetDialogContext(GetDialogContextRequest) returns (GetDialogContextResponse);
+}
+
+// Информация о диалоге
+message Dialog {
+  string id = 1;
+  string call_id = 2;
+  string session_id = 3;
+  string user_message = 4;
+  string assistant_message = 5;
+  string intent = 6;
+  google.protobuf.Struct entities = 7;
+  double confidence = 8;
+  google.protobuf.Timestamp timestamp = 9;
+}
+
+// Ход диалога
+message DialogTurn {
+  string id = 1;
+  string dialog_id = 2;
+  string user_message = 3;
+  string assistant_message = 4;
+  string intent = 5;
+  google.protobuf.Struct entities = 6;
+  double confidence = 7;
+  google.protobuf.Timestamp timestamp = 8;
+}
+
+// Контекст диалога
+message DialogContext {
+  string session_id = 1;
+  string call_id = 2;
+  repeated DialogTurn turns = 3;
+  string current_intent = 4;
+  google.protobuf.Struct current_entities = 5;
+  google.protobuf.Struct conversation_state = 6;
+  google.protobuf.Timestamp last_activity = 7;
+}
+
+// Запрос на создание диалога
+message CreateDialogRequest {
+  string call_id = 1;
+  string session_id = 2;
+  string user_message = 3;
+  string assistant_message = 4;
+  string intent = 5;
+  google.protobuf.Struct entities = 6;
+  double confidence = 7;
+}
+
+// Ответ на создание диалога
+message CreateDialogResponse {
+  Dialog dialog = 1;
+}
+
+// Запрос на получение диалога
+message GetDialogRequest {
+  string dialog_id = 1;
+}
+
+// Ответ на получение диалога
+message GetDialogResponse {
+  Dialog dialog = 1;
+}
+
+// Запрос на добавление хода в диалог
+message AddDialogTurnRequest {
+  string dialog_id = 1;
+  string user_message = 2;
+  string assistant_message = 3;
+  string intent = 4;
+  google.protobuf.Struct entities = 5;
+  double confidence = 6;
+}
+
+// Ответ на добавление хода в диалог
+message AddDialogTurnResponse {
+  DialogTurn turn = 1;
+}
+
+// Запрос на получение истории диалога
+message GetDialogHistoryRequest {
+  string session_id = 1;
+  string call_id = 2;
+  int32 limit = 3;
+  google.protobuf.Timestamp from_timestamp = 4;
+}
+
+// Ответ на получение истории диалога
+message GetDialogHistoryResponse {
+  repeated DialogTurn turns = 1;
+  int32 total = 2;
+}
+
+// Запрос на обновление намерения
+message UpdateIntentRequest {
+  string dialog_id = 1;
+  string intent = 2;
+  google.protobuf.Struct entities = 3;
+  double confidence = 4;
+}
+
+// Ответ на обновление намерения
+message UpdateIntentResponse {
+  Dialog dialog = 1;
+}
+
+// Запрос на получение контекста диалога
+message GetDialogContextRequest {
+  string session_id = 1;
+  string call_id = 2;
+}
+
+// Ответ на получение контекста диалога
+message GetDialogContextResponse {
+  DialogContext context = 1;
+}

@@ -1,0 +1,164 @@
+syntax = "proto3";
+
+package sales_voice.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// Сервис для управления звонками
+service CallService {
+  // Создать новый звонок
+  rpc CreateCall(CreateCallRequest) returns (CreateCallResponse);
+  
+  // Получить информацию о звонке
+  rpc GetCall(GetCallRequest) returns (GetCallResponse);
+  
+  // Обновить статус звонка
+  rpc UpdateCallStatus(UpdateCallStatusRequest) returns (UpdateCallStatusResponse);
+  
+  // Завершить звонок
+  rpc EndCall(EndCallRequest) returns (EndCallResponse);
+  
+  // Получить список звонков
+  rpc ListCalls(ListCallsRequest) returns (ListCallsResponse);
+  
+  // Получить статистику звонков
+  rpc GetCallStats(GetCallStatsRequest) returns (GetCallStatsResponse);
+}
+
+// Направление звонка
+enum CallDirection {
+  CALL_DIRECTION_UNSPECIFIED = 0;
+  CALL_DIRECTION_INCOMING = 1;
+  CALL_DIRECTION_OUTGOING = 2;
+}
+
+// Статус звонка
+enum CallStatus {
+  CALL_STATUS_UNSPECIFIED = 0;
+  CALL_STATUS_INITIATED = 1;
+  CALL_STATUS_RINGING = 2;
+  CALL_STATUS_ANSWERED = 3;
+  CALL_STATUS_COMPLETED = 4;
+  CALL_STATUS_FAILED = 5;
+  CALL_STATUS_BUSY = 6;
+  CALL_STATUS_NO_ANSWER = 7;
+}
+
+// Тональность
+enum Sentiment {
+  SENTIMENT_UNSPECIFIED = 0;
+  SENTIMENT_POSITIVE = 1;
+  SENTIMENT_NEUTRAL = 2;
+  SENTIMENT_NEGATIVE = 3;
+}
+
+// Информация о звонке
+message Call {
+  string id = 1;
+  string client_id = 2;
+  string phone_number = 3;
+  CallDirection direction = 4;
+  CallStatus status = 5;
+  int32 duration = 6;
+  string recording_url = 7;
+  string transcript = 8;
+  string summary = 9;
+  Sentiment sentiment = 10;
+  double confidence_score = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
+}
+
+// Запрос на создание звонка
+message CreateCallRequest {
+  string client_id = 1;
+  string phone_number = 2;
+  CallDirection direction = 3;
+}
+
+// Ответ на создание звонка
+message CreateCallResponse {
+  Call call = 1;
+}
+
+// Запрос на получение звонка
+message GetCallRequest {
+  string call_id = 1;
+}
+
+// Ответ на получение звонка
+message GetCallResponse {
+  Call call = 1;
+}
+
+// Запрос на обновление статуса звонка
+message UpdateCallStatusRequest {
+  string call_id = 1;
+  CallStatus status = 2;
+}
+
+// Ответ на обновление статуса звонка
+message UpdateCallStatusResponse {
+  Call call = 1;
+}
+
+// Запрос на завершение звонка
+message EndCallRequest {
+  string call_id = 1;
+  int32 duration = 2;
+  string recording_url = 3;
+  string transcript = 4;
+  string summary = 5;
+  Sentiment sentiment = 6;
+  double confidence_score = 7;
+}
+
+// Ответ на завершение звонка
+message EndCallResponse {
+  Call call = 1;
+}
+
+// Запрос на получение списка звонков
+message ListCallsRequest {
+  string client_id = 1;
+  CallDirection direction = 2;
+  CallStatus status = 3;
+  google.protobuf.Timestamp from_date = 4;
+  google.protobuf.Timestamp to_date = 5;
+  int32 page = 6;
+  int32 page_size = 7;
+}
+
+// Ответ на получение списка звонков
+message ListCallsResponse {
+  repeated Call calls = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// Запрос на получение статистики звонков
+message GetCallStatsRequest {
+  google.protobuf.Timestamp from_date = 1;
+  google.protobuf.Timestamp to_date = 2;
+  string client_id = 3;
+}
+
+// Статистика звонков
+message CallStats {
+  int32 total_calls = 1;
+  int32 incoming_calls = 2;
+  int32 outgoing_calls = 3;
+  int32 completed_calls = 4;
+  int32 failed_calls = 5;
+  double average_duration = 6;
+  double total_duration = 7;
+  double positive_sentiment_ratio = 8;
+  double negative_sentiment_ratio = 9;
+}
+
+// Ответ на получение статистики звонков
+message GetCallStatsResponse {
+  CallStats stats = 1;
+}
