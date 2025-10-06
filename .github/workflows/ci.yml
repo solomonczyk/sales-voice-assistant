@@ -26,14 +26,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-      - name: Detect workspaces (optional)
+      - name: Check telephony-gateway
         run: |
-          if [ -f package.json ]; then
+          if [ -f apps/telephony-gateway/package.json ]; then
+            cd apps/telephony-gateway
             npm -v && node -v
-            echo "package.json found"
+            echo "telephony-gateway package.json found"
+            if [ -f package-lock.json ]; then
+              echo "package-lock.json found"
+            else
+              echo "package-lock.json not found - will be created on first install"
+            fi
           else
-            echo "No Node workspace yet, skipping install"
+            echo "No telephony-gateway package.json found"
           fi
           
   python-setup:
@@ -45,11 +50,16 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
-      - name: Validate Python (optional)
+      - name: Check shared-lib
         run: |
-          python --version
-          pip --version
+          if [ -f packages/shared-lib/pyproject.toml ]; then
+            cd packages/shared-lib
+            python --version
+            pip --version
+            echo "shared-lib pyproject.toml found"
+          else
+            echo "No shared-lib pyproject.toml found"
+          fi
           
   docker-build:
     runs-on: ubuntu-latest
