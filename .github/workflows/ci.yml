@@ -51,15 +51,26 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Check shared-lib
+          cache: false
+      - name: Check Python services
         run: |
+          python --version
+          pip --version
+          echo "Checking Python services..."
           if [ -f packages/shared-lib/pyproject.toml ]; then
-            cd packages/shared-lib
-            python --version
-            pip --version
-            echo "shared-lib pyproject.toml found"
-          else
-            echo "No shared-lib pyproject.toml found"
+            echo "✅ shared-lib pyproject.toml found"
+          fi
+          if [ -f apps/asr-service/requirements.txt ]; then
+            echo "✅ asr-service requirements.txt found"
+          fi
+          if [ -f apps/tts-service/requirements.txt ]; then
+            echo "✅ tts-service requirements.txt found"
+          fi
+          if [ -f apps/dialog-orchestrator/requirements.txt ]; then
+            echo "✅ dialog-orchestrator requirements.txt found"
+          fi
+          if [ -f apps/crm-connector/requirements.txt ]; then
+            echo "✅ crm-connector requirements.txt found"
           fi
           
   docker-build:
