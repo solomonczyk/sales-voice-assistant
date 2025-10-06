@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  repo-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Show tree
+        run: |
+          ls -la
+          find . -maxdepth 3 -type d -print
+          
+  node-setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Detect workspaces (optional)
+        run: |
+          if [ -f package.json ]; then
+            npm -v && node -v
+            echo "package.json found"
+          else
+            echo "No Node workspace yet, skipping install"
+          fi
+          
+  python-setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Validate Python (optional)
+        run: |
+          python --version
+          pip --version
+          
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Validate Docker setup
+        run: |
+          docker --version
+          docker buildx version
