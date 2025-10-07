@@ -4,9 +4,11 @@ CRM Connector - Интеграция с Bitrix24
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Optional, Dict, Any
 
+import aiohttp
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -14,6 +16,16 @@ from pydantic import BaseModel
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Конфигурация Bitrix24
+from dotenv import load_dotenv
+load_dotenv()
+
+BITRIX24_WEBHOOK_URL = os.getenv("BITRIX24_WEBHOOK_URL")
+BITRIX24_DOMAIN = os.getenv("BITRIX24_DOMAIN")
+
+logger.info(f"Bitrix24 Domain: {BITRIX24_DOMAIN}")
+logger.info(f"Bitrix24 Webhook URL: {'configured' if BITRIX24_WEBHOOK_URL else 'not configured'}")
 
 # Модели данных
 class LeadData(BaseModel):
@@ -57,6 +69,144 @@ crm_stats = {
     "tasks_created": 0,
     "failed_requests": 0
 }
+
+async def create_bitrix24_lead(lead_data: LeadData) -> Dict[str, Any]:
+    """
+    Создание лида в Bitrix24 через API
+    
+    Args:
+        lead_data: Данные лида
+    
+    Returns:
+        Результат создания лида
+    """
+    if not BITRIX24_WEBHOOK_URL:
+        logger.warning("Bitrix24 webhook URL не настроен, используем заглушку")
+        return {
+            "result": True,
+            "id": f"lead_{hash(lead_data.phone)}",
+            "message": "Лид создан (заглушка)"
+        }
+    
+    # Подготавливаем данные для Bitrix24
+    bitrix_data = {
+        "fields": {
+            "TITLE": lead_data.title,
+            "NAME": lead_data.name,
+            "PHONE": [{"VALUE": lead_data.phone, "VALUE_TYPE": "WORK"}],
+            "EMAIL": [{"VALUE": lead_data.email, "VALUE_TYPE": "WORK"}] if lead_data.email else [],
+            "COMPANY_TITLE": lead_data.company,
+            "SOURCE_ID": "WEB",  # Источник - веб
+            "COMMENTS": lead_data.notes or f"Создан через голосового ассистента. Интерес: {lead_data.product_interest}"
+        }
+    }
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(
+                f"{BITRIX24_WEBHOOK_URL}/crm.lead.add",
+                json=bitrix_data
+            ) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    if result.get("result"):
+                        logger.info(f"Лид создан в Bitrix24: ID {result.get('result')}")
+                        return {
+                            "result": True,
+                            "id": result.get("result"),
+                            "message": "Лид успешно создан в Bitrix24"
+                        }
+                    else:
+                        error = result.get("error_description", "Неизвестная ошибка")
+                        logger.error(f"Ошибка создания лида в Bitrix24: {error}")
+                        return {
+                            "result": False,
+                            "error": error,
+                            "message": f"Ошибка создания лида: {error}"
+                        }
+                else:
+                    error_text = await response.text()
+                    logger.error(f"HTTP ошибка Bitrix24: {response.status} - {error_text}")
+                    return {
+                        "result": False,
+                        "error": f"HTTP {response.status}",
+                        "message": f"Ошибка API: {error_text}"
+                    }
+        except aiohttp.ClientError as e:
+            logger.error(f"Сетевая ошибка Bitrix24: {e}")
+            return {
+                "result": False,
+                "error": str(e),
+                "message": f"Сетевая ошибка: {str(e)}"
+            }
+
+async def create_bitrix24_deal(deal_data: DealData) -> Dict[str, Any]:
+    """
+    Создание сделки в Bitrix24 через API
+    
+    Args:
+        deal_data: Данные сделки
+    
+    Returns:
+        Результат создания сделки
+    """
+    if not BITRIX24_WEBHOOK_URL:
+        logger.warning("Bitrix24 webhook URL не настроен, используем заглушку")
+        return {
+            "result": True,
+            "id": f"deal_{hash(deal_data.title)}",
+            "message": "Сделка создана (заглушка)"
+        }
+    
+    # Подготавливаем данные для Bitrix24
+    bitrix_data = {
+        "fields": {
+            "TITLE": deal_data.title,
+            "OPPORTUNITY": deal_data.amount,
+            "CURRENCY_ID": "RUB",
+            "STAGE_ID": "NEW",  # Новая сделка
+            "COMMENTS": deal_data.description or "Создана через голосового ассистента"
+        }
+    }
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(
+                f"{BITRIX24_WEBHOOK_URL}/crm.deal.add",
+                json=bitrix_data
+            ) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    if result.get("result"):
+                        logger.info(f"Сделка создана в Bitrix24: ID {result.get('result')}")
+                        return {
+                            "result": True,
+                            "id": result.get("result"),
+                            "message": "Сделка успешно создана в Bitrix24"
+                        }
+                    else:
+                        error = result.get("error_description", "Неизвестная ошибка")
+                        logger.error(f"Ошибка создания сделки в Bitrix24: {error}")
+                        return {
+                            "result": False,
+                            "error": error,
+                            "message": f"Ошибка создания сделки: {error}"
+                        }
+                else:
+                    error_text = await response.text()
+                    logger.error(f"HTTP ошибка Bitrix24: {response.status} - {error_text}")
+                    return {
+                        "result": False,
+                        "error": f"HTTP {response.status}",
+                        "message": f"Ошибка API: {error_text}"
+                    }
+        except aiohttp.ClientError as e:
+            logger.error(f"Сетевая ошибка Bitrix24: {e}")
+            return {
+                "result": False,
+                "error": str(e),
+                "message": f"Сетевая ошибка: {str(e)}"
+            }
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -107,26 +257,35 @@ async def create_lead(lead_data: LeadData):
         
         logger.info(f"Создание лида: {lead_data.name}, телефон: {lead_data.phone}")
         
-        # Заглушка для создания лида в Bitrix24
-        # В реальной реализации здесь будет HTTP запрос к Bitrix24 API
-        lead_id = f"lead_{hash(lead_data.phone)}"
+        # Создание лида в Bitrix24 через API
+        bitrix_result = await create_bitrix24_lead(lead_data)
         
-        crm_stats["leads_created"] += 1
-        
-        logger.info(f"Лид создан: ID={lead_id}")
-        
-        return CRMResponse(
-            success=True,
-            id=lead_id,
-            message="Лид успешно создан",
-            data={
-                "lead_id": lead_id,
-                "title": lead_data.title,
-                "name": lead_data.name,
-                "phone": lead_data.phone,
-                "source": lead_data.source
-            }
-        )
+        if bitrix_result["result"]:
+            crm_stats["leads_created"] += 1
+            logger.info(f"Лид создан: ID={bitrix_result['id']}")
+            
+            return CRMResponse(
+                success=True,
+                id=bitrix_result["id"],
+                message=bitrix_result["message"],
+                data={
+                    "lead_id": bitrix_result["id"],
+                    "title": lead_data.title,
+                    "name": lead_data.name,
+                    "phone": lead_data.phone,
+                    "source": lead_data.source
+                }
+            )
+        else:
+            crm_stats["failed_requests"] += 1
+            logger.error(f"Ошибка создания лида: {bitrix_result['error']}")
+            
+            return CRMResponse(
+                success=False,
+                id=None,
+                message=bitrix_result["message"],
+                data={"error": bitrix_result["error"]}
+            )
         
     except Exception as e:
         crm_stats["failed_requests"] += 1
