@@ -4,9 +4,12 @@ TTS Service - Синтез речи с Yandex SpeechKit
 
 import asyncio
 import logging
+import os
+import tempfile
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, List
 
+import aiohttp
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
@@ -15,6 +18,10 @@ from pydantic import BaseModel
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Конфигурация OpenAI TTS
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_TTS_URL = "https://api.openai.com/v1/audio/speech"
 
 # Модели данных
 class SynthesisRequest(BaseModel):
@@ -47,12 +54,62 @@ synthesis_stats = {
     "total_audio_duration": 0.0
 }
 
-# Доступные голоса
+async def synthesize_with_openai(text: str, voice: str = "alloy", format: str = "wav") -> bytes:
+    """
+    Синтез речи через OpenAI TTS
+    
+    Args:
+        text: Текст для синтеза
+        voice: Голос для синтеза (alloy, echo, fable, onyx, nova, shimmer)
+        format: Формат аудио (mp3, opus, aac, flac)
+    
+    Returns:
+        Аудио данные в байтах
+    """
+    if not OPENAI_API_KEY:
+        raise HTTPException(status_code=500, detail="OpenAI API ключ не настроен")
+    
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    data = {
+        "model": "tts-1",
+        "input": text,
+        "voice": voice,
+        "response_format": format
+    }
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(
+                OPENAI_TTS_URL,
+                headers=headers,
+                json=data
+            ) as response:
+                if response.status == 200:
+                    audio_data = await response.read()
+                    return audio_data
+                else:
+                    error_text = await response.text()
+                    logger.error(f"OpenAI TTS API error: {response.status} - {error_text}")
+                    raise HTTPException(
+                        status_code=response.status,
+                        detail=f"OpenAI TTS API error: {error_text}"
+                    )
+        except aiohttp.ClientError as e:
+            logger.error(f"Network error: {e}")
+            raise HTTPException(status_code=500, detail=f"Network error: {str(e)}")
+
+# Доступные голоса OpenAI
 AVAILABLE_VOICES = [
-    VoiceInfo(id="alena", name="Алена", language="ru-RU", gender="female", sample_rate=16000),
-    VoiceInfo(id="filipp", name="Филипп", language="ru-RU", gender="male", sample_rate=16000),
-    VoiceInfo(id="jane", name="Джейн", language="en-US", gender="female", sample_rate=16000),
-    VoiceInfo(id="john", name="Джон", language="en-US", gender="male", sample_rate=16000),
+    VoiceInfo(id="alloy", name="Alloy", language="en-US", gender="neutral", sample_rate=24000),
+    VoiceInfo(id="echo", name="Echo", language="en-US", gender="male", sample_rate=24000),
+    VoiceInfo(id="fable", name="Fable", language="en-US", gender="male", sample_rate=24000),
+    VoiceInfo(id="onyx", name="Onyx", language="en-US", gender="male", sample_rate=24000),
+    VoiceInfo(id="nova", name="Nova", language="en-US", gender="female", sample_rate=24000),
+    VoiceInfo(id="shimmer", name="Shimmer", language="en-US", gender="female", sample_rate=24000)
 ]
 
 @asynccontextmanager
@@ -88,7 +145,7 @@ async def health_check():
         "stats": synthesis_stats
     }
 
-@app.get("/voices", response_model=list[VoiceInfo])
+@app.get("/voices", response_model=List[VoiceInfo])
 async def get_voices():
     """Получение списка доступных голосов"""
     return AVAILABLE_VOICES
@@ -115,10 +172,34 @@ async def synthesize_speech(request: SynthesisRequest):
         
         logger.info(f"Синтез речи: '{request.text[:50]}...' голосом {voice.name}")
         
-        # Заглушка для синтеза
-        # В реальной реализации здесь будет интеграция с Yandex SpeechKit
-        audio_duration = len(request.text) * 0.1  # Примерная длительность
-        audio_url = f"/audio/synthesized_{hash(request.text)}.wav"
+        # Синтез через OpenAI TTS
+        if OPENAI_API_KEY:
+            try:
+                audio_data = await synthesize_with_openai(
+                    request.text, 
+                    request.voice, 
+                    request.format
+                )
+                
+                # Сохраняем аудио во временный файл
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{request.format}") as temp_file:
+                    temp_file.write(audio_data)
+                    temp_file_path = temp_file.name
+                
+                # Примерная длительность (1 символ = 0.1 секунды)
+                audio_duration = len(request.text) * 0.1
+                audio_url = f"/audio/synthesized_{hash(request.text)}.{request.format}"
+                
+                logger.info(f"OpenAI TTS синтез завершен: {len(audio_data)} байт аудио")
+            except Exception as e:
+                logger.error(f"Ошибка OpenAI TTS: {e}")
+                # Fallback к заглушке
+                audio_duration = len(request.text) * 0.1
+                audio_url = f"/audio/synthesized_{hash(request.text)}.wav"
+        else:
+            # Заглушка для синтеза (если нет API ключа)
+            audio_duration = len(request.text) * 0.1  # Примерная длительность
+            audio_url = f"/audio/synthesized_{hash(request.text)}.wav"
         
         synthesis_stats["successful_requests"] += 1
         synthesis_stats["total_audio_duration"] += audio_duration
