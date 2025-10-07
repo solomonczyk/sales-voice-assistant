@@ -93,16 +93,17 @@ export interface MetricsData {
   cpu_usage_percent: number;
 }
 
-// WebSocket события
-export interface WebSocketEvents {
-  // Клиент → Сервер
+// WebSocket события - клиент → сервер
+export interface ClientToServerEvents {
   'join-call': { callId: string; userId?: string };
   'leave-call': {};
   'offer': { callId: string; sdp: string };
   'answer': { callId: string; sdp: string };
   'ice-candidate': { callId: string; candidate: string };
-  
-  // Сервер → Клиент
+}
+
+// WebSocket события - сервер → клиент
+export interface ServerToClientEvents {
   'joined-call': { callId: string; connectionId: string };
   'offer': { callId: string; sdp: string; from: string };
   'answer': { callId: string; sdp: string; from: string };

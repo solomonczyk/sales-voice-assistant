@@ -4,9 +4,11 @@ Dialog Orchestrator - Диалоговый агент для голосовог�
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
+import aiohttp
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -14,6 +16,15 @@ from pydantic import BaseModel
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Конфигурация OpenAI GPT
+from dotenv import load_dotenv
+load_dotenv()
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
+
+logger.info(f"OpenAI API Key loaded: {OPENAI_API_KEY[:10] + '...' if OPENAI_API_KEY else 'None'}")
 
 # Модели данных
 class DialogMessage(BaseModel):
@@ -23,7 +34,7 @@ class DialogMessage(BaseModel):
 
 class DialogContext(BaseModel):
     session_id: str
-    messages: list[DialogMessage]
+    messages: List[DialogMessage]
     state: Dict[str, Any] = {}
     intent: Optional[str] = None
     entities: Dict[str, Any] = {}
@@ -40,7 +51,7 @@ class DialogResponse(BaseModel):
     entities: Dict[str, Any] = {}
     confidence: float
     state: Dict[str, Any] = {}
-    actions: list[str] = []
+    actions: List[str] = []
 
 # Глобальное состояние
 dialog_stats = {
@@ -49,6 +60,63 @@ dialog_stats = {
     "total_messages": 0,
     "intents_detected": 0
 }
+
+async def generate_response_with_gpt(messages: List[Dict[str, str]]) -> str:
+    """
+    Генерация ответа через OpenAI GPT
+    
+    Args:
+        messages: Список сообщений в формате [{"role": "user", "content": "..."}]
+    
+    Returns:
+        Ответ от GPT
+    """
+    if not OPENAI_API_KEY:
+        raise HTTPException(status_code=500, detail="OpenAI API ключ не настроен")
+    
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    # Системный промпт для голосового ассистента продаж
+    system_message = {
+        "role": "system",
+        "content": """Ты голосовой ассистент отдела продаж. Твоя задача - помочь клиентам с информацией о продуктах, услугах и контактах. 
+        Отвечай кратко, дружелюбно и профессионально. Если не знаешь ответа, предложи связаться с менеджером.
+        Всегда заканчивай разговор предложением помощи или вопросами о том, что еще интересует клиента."""
+    }
+    
+    # Добавляем системное сообщение в начало
+    full_messages = [system_message] + messages
+    
+    data = {
+        "model": "gpt-3.5-turbo",
+        "messages": full_messages,
+        "max_tokens": 150,
+        "temperature": 0.7
+    }
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(
+                OPENAI_CHAT_URL,
+                headers=headers,
+                json=data
+            ) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    return result["choices"][0]["message"]["content"]
+                else:
+                    error_text = await response.text()
+                    logger.error(f"OpenAI GPT API error: {response.status} - {error_text}")
+                    raise HTTPException(
+                        status_code=response.status,
+                        detail=f"OpenAI GPT API error: {error_text}"
+                    )
+        except aiohttp.ClientError as e:
+            logger.error(f"Network error: {e}")
+            raise HTTPException(status_code=500, detail=f"Network error: {str(e)}")
 
 # Простые правила для MVP
 DIALOG_RULES = {
@@ -195,9 +263,22 @@ async def process_dialog(request: DialogRequest):
         if intent != "unknown":
             dialog_stats["intents_detected"] += 1
         
-        # Генерация ответа
+        # Генерация ответа через OpenAI GPT
         context = request.context or {}
-        assistant_message = generate_response(intent, entities, context)
+        
+        # Подготавливаем сообщения для GPT
+        messages = [{"role": "user", "content": request.user_message}]
+        
+        if OPENAI_API_KEY:
+            try:
+                assistant_message = await generate_response_with_gpt(messages)
+                logger.info("Ответ сгенерирован через OpenAI GPT")
+            except Exception as e:
+                logger.error(f"Ошибка GPT: {e}, используем fallback")
+                assistant_message = generate_response(intent, entities, context)
+        else:
+            logger.warning("OpenAI API ключ не настроен, используем fallback")
+            assistant_message = generate_response(intent, entities, context)
         
         # Определение действий
         actions = []

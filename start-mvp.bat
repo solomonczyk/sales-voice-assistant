@@ -119,29 +119,29 @@ cd ..\..
 REM ASR Service
 echo 🎤 Запуск ASR Service...
 cd apps\asr-service
-pip install -r requirements.txt
-start "ASR Service" cmd /k "python main.py"
+py -m pip install -r requirements.txt
+start "ASR Service" cmd /k "py main.py"
 cd ..\..
 
 REM TTS Service
 echo 🔊 Запуск TTS Service...
 cd apps\tts-service
-pip install -r requirements.txt
-start "TTS Service" cmd /k "python main.py"
+py -m pip install -r requirements.txt
+start "TTS Service" cmd /k "py main.py"
 cd ..\..
 
 REM Dialog Orchestrator
 echo 🤖 Запуск Dialog Orchestrator...
 cd apps\dialog-orchestrator
-pip install -r requirements.txt
-start "Dialog Orchestrator" cmd /k "python main.py"
+py -m pip install -r requirements.txt
+start "Dialog Orchestrator" cmd /k "py main.py"
 cd ..\..
 
 REM CRM Connector
 echo 📊 Запуск CRM Connector...
 cd apps\crm-connector
-pip install -r requirements.txt
-start "CRM Connector" cmd /k "python main.py"
+py -m pip install -r requirements.txt
+start "CRM Connector" cmd /k "py main.py"
 cd ..\..
 
 REM Ожидание запуска сервисов

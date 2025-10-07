@@ -19,6 +19,7 @@ export class SIPHandler extends EventEmitter {
   private logger: Logger;
   private sipService: SIPService;
   private metrics: MetricsCollector;
+  private activeSIPCalls: Map<string, SIPCall> = new Map();
 
   constructor(
     private callManager: CallManager,

@@ -4,9 +4,12 @@ ASR Service - Распознавание речи с Yandex SpeechKit
 
 import asyncio
 import logging
+import os
+import tempfile
 from contextlib import asynccontextmanager
 from typing import Optional
 
+import aiohttp
 import uvicorn
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
@@ -14,6 +17,15 @@ from pydantic import BaseModel
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Конфигурация OpenAI Whisper
+from dotenv import load_dotenv
+load_dotenv()
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_WHISPER_URL = "https://api.openai.com/v1/audio/transcriptions"
+
+logger.info(f"OpenAI API Key loaded: {OPENAI_API_KEY[:10] + '...' if OPENAI_API_KEY else 'None'}")
 
 # Модели данных
 class RecognitionRequest(BaseModel):
@@ -39,10 +51,61 @@ recognition_stats = {
     "total_audio_duration": 0.0
 }
 
+async def recognize_with_openai(audio_data: bytes, language: str = "ru") -> dict:
+    """
+    Распознавание речи через OpenAI Whisper
+    
+    Args:
+        audio_data: Аудио данные в байтах
+        language: Язык распознавания (ru, en, etc.)
+    
+    Returns:
+        Результат распознавания от OpenAI API
+    """
+    if not OPENAI_API_KEY:
+        logger.error(f"OpenAI API ключ не настроен: {OPENAI_API_KEY}")
+        raise HTTPException(status_code=500, detail="OpenAI API ключ не настроен")
+    
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}"
+    }
+    
+    # Подготавливаем данные для multipart/form-data
+    data = aiohttp.FormData()
+    data.add_field('file', audio_data, filename='audio.wav', content_type='audio/wav')
+    data.add_field('model', 'whisper-1')
+    data.add_field('language', language)
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(
+                OPENAI_WHISPER_URL,
+                headers=headers,
+                data=data
+            ) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    return result
+                else:
+                    error_text = await response.text()
+                    logger.error(f"OpenAI Whisper API error: {response.status} - {error_text}")
+                    raise HTTPException(
+                        status_code=response.status,
+                        detail=f"OpenAI Whisper API error: {error_text}"
+                    )
+        except aiohttp.ClientError as e:
+            logger.error(f"Network error: {e}")
+            raise HTTPException(status_code=500, detail=f"Network error: {str(e)}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Управление жизненным циклом приложения"""
     logger.info("ASR Service запускается...")
+    
+    # Проверка конфигурации
+    if not OPENAI_API_KEY:
+        logger.warning("OPENAI_API_KEY не настроен - будет использоваться заглушка")
+    
     yield
     logger.info("ASR Service останавливается...")
 
@@ -93,20 +156,37 @@ async def recognize_speech(
         recognition_stats["total_requests"] += 1
         
         # Проверка типа файла
-        if not audio.content_type.startswith('audio/'):
+        if audio.content_type and not audio.content_type.startswith('audio/'):
             raise HTTPException(status_code=400, detail="Файл должен быть аудио")
         
         # Чтение аудио данных
         audio_data = await audio.read()
         audio_size = len(audio_data)
         
-        logger.info(f"Получен аудио файл: {audio.filename}, размер: {audio_size} байт")
+        logger.info(f"Получен аудио файл: {audio.filename}, размер: {audio_size} байт, content_type: {audio.content_type}")
         
-        # Заглушка для распознавания
-        # В реальной реализации здесь будет интеграция с Yandex SpeechKit
-        recognized_text = "Привет! Это тестовое распознавание речи."
-        confidence = 0.95
-        duration = audio_size / 16000  # Примерная длительность
+        # Распознавание через OpenAI Whisper
+        if OPENAI_API_KEY:
+            try:
+                logger.info(f"Вызываем OpenAI Whisper с языком: {language}")
+                openai_result = await recognize_with_openai(audio_data, language)
+                recognized_text = openai_result.get("text", "")
+                confidence = 0.9  # OpenAI не возвращает confidence, используем стандартное значение
+                duration = audio_size / 16000  # Примерная длительность
+                
+                logger.info(f"OpenAI Whisper результат: '{recognized_text}'")
+            except Exception as e:
+                logger.error(f"Ошибка OpenAI Whisper: {e}", exc_info=True)
+                # Fallback к заглушке
+                recognized_text = "Ошибка распознавания через OpenAI Whisper"
+                confidence = 0.1
+                duration = audio_size / 16000
+        else:
+            # Заглушка для распознавания (если нет API ключа)
+            logger.warning("OpenAI API ключ не настроен, используем заглушку")
+            recognized_text = "Привет! Это тестовое распознавание речи."
+            confidence = 0.95
+            duration = audio_size / 16000  # Примерная длительность
         
         recognition_stats["successful_requests"] += 1
         recognition_stats["total_audio_duration"] += duration
